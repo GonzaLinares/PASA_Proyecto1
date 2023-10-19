@@ -25,6 +25,7 @@ def simulate():
     #Elejimos las dimensiones de la habitacion en metros y creamos la habitacion
     room_dim = [0.05, 0.05, 0.02]
     room = pra.ShoeBox(room_dim, fs=fs, materials=m, air_absorption=True)
+    
 
     #Agregamos la fuente y el microfono
     mic = np.array([0.025, 0.025, 0.02-1e-4])
@@ -50,4 +51,4 @@ def simulate():
 
 if __name__ == "__main__":
 
-    ...
+    simulate()
