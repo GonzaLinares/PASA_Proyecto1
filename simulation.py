@@ -12,6 +12,7 @@ import pyroomacoustics as pra
 def simulate():
 
     x = np.random.randn(999999) #Generamos ruido gaussiano
+    y = np.random.randn(999999) #Mic de cancelacion
     fs = 48000
 
     #Seteamos los materiales de la habitacion
@@ -23,19 +24,27 @@ def simulate():
                             south=0.8,)
 
     #Elejimos las dimensiones de la habitacion en metros y creamos la habitacion
-    room_dim = [0.05, 0.05, 0.02]
-    room = pra.ShoeBox(room_dim, fs=fs, materials=m, air_absorption=True)
+    #room_dim = [0.05, 0.05, 0.02]
+    #room = pra.ShoeBox(room_dim, fs=fs, materials=m, air_absorption=True)
+
+    height = 0.1
+    roomCorners = np.array([[-1.0,-1.0, 0.4, 0.2, 0.2+np.sqrt(2)/20, 0.4+np.sqrt(2)/10, 0.6, 0.6], \
+                            [ 0.1, 0.2, 0.2, 0.4, 0.4+np.sqrt(2)/20, 0.2, 0.2, 0.1]])
+    room = pra.Room.from_corners(roomCorners, fs=fs)
+    room.extrude(height)
 
     #Agregamos la fuente y el microfono
-    mic = np.array([0.025, 0.025, 0.02-1e-4])
-    room.add_source([0.025, 0.025, 1e-4], signal=x)
-    room.add_microphone(mic)
-
+    micError = np.array([0.6, 0.15, height/2])
+    room.add_microphone(micError)
+                           
+    room.add_source([-1.0, 0.15, height/2], signal=x)
+    room.add_source([0.2+np.sqrt(2)/40, 0.4+np.sqrt(2)/40, height/2], signal=y)
+    
     #Mostramos la habitacion
     fig, ax = room.plot(mic_marker_size=50)
-    ax.set_xlim([-0.025, 0.025 + 0.05])
-    ax.set_ylim([-0.025, 0.025 + 0.05])
-    ax.set_zlim([0, 0.04])
+    ax.set_xlim([-1.1, 0.6])
+    ax.set_ylim([-1.1, 0.6])
+    ax.set_zlim([0, 0.2])
     plt.show()
 
     # No se que hace esto
@@ -50,4 +59,4 @@ def simulate():
 
 if __name__ == "__main__":
 
-    ...
+    simulate()
