@@ -9,64 +9,59 @@ import scipy.io.wavfile as wav
 import helper as hp
 import pyroomacoustics as pra
 
+
 def createRoom(print):
 
-    x = np.random.randn(999999) #Generamos ruido gaussiano
-    y = np.random.randn(999999) #Mic de cancelacion
+    x = np.random.randn(999999)  # Generamos ruido gaussiano
+    y = np.random.randn(999999)  # Mic de cancelacion
     fs = 48000
 
-    #Seteamos los materiales de la habitacion
+    # Seteamos los materiales de la habitacion
     m = pra.make_materials(ceiling=0.3,
-                            floor=0.3,
-                            east=0.8,
-                            west=0.8,
-                            north=0.8,
-                            south=0.8,)
+                           floor=0.3,
+                           east=0.8,
+                           west=0.8,
+                           north=0.8,
+                           south=0.8,)
 
-    #Elejimos las dimensiones de la habitacion en metros y creamos la habitacion
-    #room_dim = [0.05, 0.05, 0.02]
-    #room = pra.ShoeBox(room_dim, fs=fs, materials=m, air_absorption=True)
+    # Elejimos las dimensiones de la habitacion en metros y creamos la habitacion
+    # room_dim = [0.05, 0.05, 0.02]
+    # room = pra.ShoeBox(room_dim, fs=fs, materials=m, air_absorption=True)
 
     height = 0.1
-    roomCorners = np.array([[-1.0,-1.0, 0.4, 0.2, 0.2+np.sqrt(2)/20, 0.4+np.sqrt(2)/10, 0.6, 0.6], \
-                            [ 0.1, 0.2, 0.2, 0.4, 0.4+np.sqrt(2)/20, 0.2, 0.2, 0.1]])
+    roomCorners = np.array([[-1.0, -1.0, 0.4, 0.2, 0.2+np.sqrt(2)/20, 0.4+np.sqrt(2)/10, 0.6, 0.6],
+                            [0.1, 0.2, 0.2, 0.4, 0.4+np.sqrt(2)/20, 0.2, 0.2, 0.1]])
     room = pra.Room.from_corners(roomCorners, fs=fs)
     room.extrude(height)
 
-    #Agregamos la fuente y el microfono
+    # Agregamos la fuente y el microfono
     micError = np.array([0.6, 0.15, height/2])
     room.add_microphone(micError)
-                           
-    room.add_source([-1.0, 0.15, height/2], signal=x)
-    room.add_source([0.2+np.sqrt(2)/40, 0.4+np.sqrt(2)/40, height/2], signal=y)
-    
-    if(print):
-        #Mostramos la habitacion
+
+    room.add_source([-1.0, 0.15, height/2])
+    room.add_source([0.2+np.sqrt(2)/40, 0.4+np.sqrt(2)/40, height/2])
+
+    if (print):
+        # Mostramos la habitacion
         fig, ax = room.plot(mic_marker_size=50)
         ax.set_xlim([-1.1, 0.6])
         ax.set_ylim([-1.1, 0.6])
         ax.set_zlim([0, 0.2])
         plt.show()
-    
+
     return room
+
 
 def getImpulse(room):
 
     room.image_source_model()
 
-    #Computamos y mostramos la respuesta al impulso
+    # Computamos y mostramos la respuesta al impulso
     room.compute_rir()
 
-    #respuesta impulsiva
-    df = pd.DataFrame({"name":str, "response":[]})
-    print(df)
-    dict = {"name":"P(z)", "response" : room.rir[0][0]}
-    df.concat(dict, ignore_index=True)
-    print(df) 
-    df.append("S(z)", room.rir[0][1])
-    df.to_csv("Synthetics response")
+    # respuesta impulsiva
+    np.savetxt('RoomSim.txt', room.rir)
 
-    plt.show()
 
 if __name__ == "__main__":
 

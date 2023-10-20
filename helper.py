@@ -2,31 +2,13 @@ import scipy.io as io
 import matplotlib.pyplot as plt
 import scipy.signal as sp
 import IPython.display as ipd
+from IPython.display import Audio, update_display
+from ipywidgets import IntProgress
+import pyroomacoustics as pra
 import numpy as np
 import scipy.linalg as lin
 from numpy.fft import fft, rfft
 from numpy.fft import fftshift, fftfreq, rfftfreq
-
-
-def saveSignalAsWAV(name, signal, fs):
-
-    io.wavfile.write(name, fs, signal)
-
-
-def getRecordedSignals():
-
-    path = ["recAAA1.wav", "recSHH1.wav"]
-
-    fs1, aSignal = io.wavfile.read(path[0])
-    fs2, shSignal = io.wavfile.read(path[1])
-
-    aSignal = (aSignal.T)
-    shSignal = (shSignal.T)
-
-    fs = {"a": fs1, "sh": fs2}
-    signal = {"a": aSignal, "sh": shSignal}
-
-    return fs, signal, path
 
 
 def play(signal, fs):
@@ -47,25 +29,6 @@ def plot_spectrogram(title, w, fs):
 
 def getNextPowerOfTwo(len):
     return 2**(len*2).bit_length()
-
-
-def get_optimal_params(x, M):
-
-    lags = sp.correlation_lags(len(x), len(x))
-    N = len(x)
-    rx = sp.correlate(x, x)/N
-
-    r = rx[np.array(M > lags) == np.array(lags >= 0)]
-
-    p = rx[np.array(-1 >= lags) == np.array(lags >= -M)][-1::-1]
-
-    wo = lin.solve_toeplitz(r, p)
-
-    jo = np.var(x) - np.dot(p, wo)
-
-    NMSE = jo/np.var(x)
-
-    return wo, jo, NMSE
 
 
 def periodogram_averaging(data, fs, L, padding_multiplier, window):
@@ -91,3 +54,80 @@ def periodogram_averaging(data, fs, L, padding_multiplier, window):
 windows = ['boxcar', 'triang', 'parzen', 'bohman', 'blackman', 'nuttall',
            'blackmanharris', 'flattop', 'bartlett', 'barthann',
            'hamming', ('kaiser', 10), ('tukey', 0.25)]
+
+
+def fxnlms_sim(w0, mu, P, S, S_hat, xgen, sound, orden_filtro, N=10000):
+    w = w0
+    J = np.zeros(N)
+    e = np.zeros(N)
+    d_hat = np.zeros(N)
+    n = np.arange(0, N, 1, dtype=int)
+
+    x = xgen(n)
+    d = sp.lfilter(P[0], P[1], x)
+    xf = sp.lfilter(S_hat[0], S_hat[1], x)
+
+    xf = np.concatenate([np.zeros(orden_filtro-1), xf])
+    zis = np.zeros(np.max([len(S[0]), len(S[1])])-1)
+    ziw = np.zeros(orden_filtro-1)
+
+    f = IntProgress(min=0, max=N)
+    ipd.display(f)
+
+    i = 0
+    ipd.display(J[0], display_id='J')
+    for n in range(N):
+
+        y, ziw = sp.lfilter(w, [1], [x[n]], zi=ziw)
+
+        y = y[0] + sound(n)
+
+        d_hat_aux, zis = sp.lfilter(S[0], S[1], [y], zi=zis)
+        d_hat[n] = d_hat_aux[0]
+        e[n] = d[n] + d_hat_aux[0]
+        J[n] = e[n] * e[n]
+        w = w - mu * xf[n:n + orden_filtro][::-1] * e[n] / \
+            (np.linalg.norm(xf[n:n + orden_filtro][::-1])**2 + 1e-6)
+        if n//(N//100) > i:
+            update_display(J[n], display_id='J')
+            f.value = n
+            i += 1
+
+    return w, J, e, d, d_hat
+
+
+def plot_results(results, P, S):
+    w, J, e, d, d_hat = results
+    plt.figure(figsize=(10, 25))
+
+    plt.subplot(411)
+    plt.title('SE vs n')
+    plt.xlabel('n')
+    plt.ylabel('Square error')
+    plt.semilogy(J)
+    J_smooth = sp.savgol_filter(J, 500, 3)
+
+    plt.semilogy(J_smooth)
+
+    plt.subplot(412)
+    plt.title('Señal error vs n')
+    plt.xlabel('n')
+    plt.ylabel('error')
+    plt.plot(e)
+
+    plt.subplot(413)
+    plt.title('Señal deseada negada y deseada estimada')
+    plt.xlabel('n')
+    plt.ylabel('Amplitud')
+    plt.plot(-d, label='Señal deseada negada')
+    plt.plot(d_hat, label='Señal deseada estimada')
+    plt.legend()
+
+    plt.subplot(414)
+
+    freqs, s = sp.freqz(P[0], S[0], fs=48000, worN=10000)
+    freqw, wps = sp.freqz(w, [1], fs=48000, worN=10000)
+    plt.title('Comparativa entre modulo de W(z) y P(z)/S(z)')
+    plt.plot(freqw, 20*np.log10(np.abs(wps)), label='W(z)')
+    plt.plot(freqs, 20*np.log10(np.abs(s)), label='P(z)/S(z)')
+    plt.legend()
