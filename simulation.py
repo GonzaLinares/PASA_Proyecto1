@@ -9,7 +9,7 @@ import scipy.io.wavfile as wav
 import helper as hp
 import pyroomacoustics as pra
 
-def simulate():
+def createRoom(print):
 
     x = np.random.randn(999999) #Generamos ruido gaussiano
     y = np.random.randn(999999) #Mic de cancelacion
@@ -40,24 +40,35 @@ def simulate():
     room.add_source([-1.0, 0.15, height/2], signal=x)
     room.add_source([0.2+np.sqrt(2)/40, 0.4+np.sqrt(2)/40, height/2], signal=y)
     
-    #Mostramos la habitacion
-    fig, ax = room.plot(mic_marker_size=50)
-    ax.set_xlim([-1.1, 0.6])
-    ax.set_ylim([-1.1, 0.6])
-    ax.set_zlim([0, 0.2])
-    plt.show()
+    if(print):
+        #Mostramos la habitacion
+        fig, ax = room.plot(mic_marker_size=50)
+        ax.set_xlim([-1.1, 0.6])
+        ax.set_ylim([-1.1, 0.6])
+        ax.set_zlim([0, 0.2])
+        plt.show()
+    
+    return room
 
-    # No se que hace esto
+def getImpulse(room):
+
     room.image_source_model()
 
     #Computamos y mostramos la respuesta al impulso
     room.compute_rir()
-    response = room.rir[0][0] #respuesta impulsiva
-    plt.plot(response)
-    
-    return response
+
+    #respuesta impulsiva
+    df = pd.DataFrame({"name":str, "response":[]})
+    print(df)
+    dict = {"name":"P(z)", "response" : room.rir[0][0]}
+    df.concat(dict, ignore_index=True)
+    print(df) 
+    df.append("S(z)", room.rir[0][1])
+    df.to_csv("Synthetics response")
+
+    plt.show()
 
 if __name__ == "__main__":
 
-    simulate()
-    simulate()
+    room = createRoom(print=False)
+    getImpulse(room)
