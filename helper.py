@@ -10,6 +10,7 @@ import scipy.linalg as lin
 from numpy.fft import fft, rfft
 from numpy.fft import fftshift, fftfreq, rfftfreq
 
+
 def play(signal, fs):
     audio = ipd.Audio(signal, rate=fs, autoplay=True)
     return audio
@@ -131,44 +132,43 @@ def plot_results(results, P, S):
     plt.plot(freqs, 20*np.log10(np.abs(s)), label='P(z)/S(z)')
     plt.legend()
 
+
 def createRoom(print):
 
-    x = np.random.randn(999999) #Generamos ruido gaussiano
-    y = np.random.randn(999999) #Mic de cancelacion
     fs = 48000
 
-    #Seteamos los materiales de la habitacion
-    m = pra.make_materials(ceiling=0.3,
-                            floor=0.3,
-                            east=0.8,
-                            west=0.8,
-                            north=0.8,
-                            south=0.8,)
+    x = np.random.randn(fs*5)  # Generamos ruido gaussiano
+    y = np.random.randn(fs*5)  # Mic de cancelacion
+    # Seteamos los materiales de la habitacion
+    m = pra.Material('rough_concrete')
 
     height = 0.1
-    roomCorners = np.array([[-1.0,-1.0, 0.4, 0.2, 0.2+np.sqrt(2)/20, 0.4+np.sqrt(2)/10, 0.6, 0.6], \
-                            [ 0.1, 0.2, 0.2, 0.4, 0.4+np.sqrt(2)/20, 0.2, 0.2, 0.1]])
+    roomCorners = np.array([[-1.0, -1.0, 0.4, 0.2, 0.2+np.sqrt(2)/20, 0.4+np.sqrt(2)/10, 0.6, 0.6],
+                            [0.1, 0.2, 0.2, 0.4, 0.4+np.sqrt(2)/20, 0.2, 0.2, 0.1]])
     room = pra.Room.from_corners(roomCorners, fs=fs)
+    room.materials = [m]*len(room.walls)
     room.extrude(height)
 
-    #Agregamos la fuente y el microfono
+    # Agregamos la fuente y el microfono
     micError = np.array([0.6, 0.15, height/2])
     micRef = np.array([-0.6, 0.15, height/2])
-    micArray = pra.beamforming.MicrophoneArray(R=np.array([micRef, micError]).T, fs=fs)
+    micArray = pra.beamforming.MicrophoneArray(
+        R=np.array([micRef, micError]).T, fs=fs)
     room.add_microphone_array(micArray)
 
     room.add_source([-1.0, 0.15, height/2], signal=x)
     room.add_source([0.2+np.sqrt(2)/40, 0.4+np.sqrt(2)/40, height/2], signal=y)
-    
-    if(print):
-        #Mostramos la habitacion
+
+    if (print):
+        # Mostramos la habitacion
         fig, ax = room.plot(mic_marker_size=50)
         ax.set_xlim([-1.1, 0.6])
         ax.set_ylim([-1.1, 0.6])
         ax.set_zlim([0, 0.2])
         plt.show()
-    
+
     return room
+
 
 def getImpulse(room):
 
@@ -177,14 +177,13 @@ def getImpulse(room):
     # Computamos y mostramos la respuesta al impulso
     room.compute_rir()
 
-    print(np.array(room.rir))
+    plt.figure()
     room.plot_rir()
-    #plt.plot(room.rir[0][0])
-    #plt.plot(room.rir[0][1])
-    #plt.show()
-    #plt.plot(room.rir[1][0]) #Del source
-    #plt.plot(room.rir[1][1])
-    plt.show()
-
+    # plt.plot(room.rir[0][0])
+    # plt.plot(room.rir[0][1])
+    # plt.show()
+    # plt.plot(room.rir[1][0]) #Del source
+    # plt.plot(room.rir[1][1])
+    print(type(np.array(room.rir)[0][0]))
     # respuesta impulsiva
     np.savetxt('RoomSim.txt', np.array(room.rir).ravel())
