@@ -2,7 +2,7 @@ import scipy.io as io
 import matplotlib.pyplot as plt
 import scipy.signal as sp
 import IPython.display as ipd
-from IPython.display import Audio, update_display
+from IPython.display import Audio, update_display, display
 from ipywidgets import IntProgress
 import pyroomacoustics as pra
 import numpy as np
@@ -29,6 +29,23 @@ def plot_spectrogram(title, w, fs):
 
 def getNextPowerOfTwo(len):
     return 2**(len*2).bit_length()
+
+
+def get_optimal_params(x, y, M):
+
+    N = len(x)
+    r = sp.correlate(x, x)/N
+    p = sp.correlate(x, y)/N
+    r = r[N-1:N-1 + M]
+    # Correlate calcula la cross-corr r(-k), y necesitamos r(k), y esto no es par como la autocorrelacion
+    p = p[N-1:N-1-(M):-1]
+    wo = lin.solve_toeplitz(r, p)
+
+    jo = np.var(y) - np.dot(p, wo)
+
+    NMSE = jo/np.var(y)
+
+    return wo, jo, NMSE
 
 
 def periodogram_averaging(data, fs, L, padding_multiplier, window):
@@ -72,10 +89,10 @@ def fxnlms_sim(w0, mu, P, S, S_hat, xgen, sound, orden_filtro, N=10000):
     ziw = np.zeros(orden_filtro-1)
 
     f = IntProgress(min=0, max=N)
-    ipd.display(f)
+    display(f)
 
     i = 0
-    ipd.display(J[0], display_id='J')
+    display(J[0], display_id='J')
     for n in range(N):
 
         y, ziw = sp.lfilter(w, [1], [x[n]], zi=ziw)
@@ -96,7 +113,7 @@ def fxnlms_sim(w0, mu, P, S, S_hat, xgen, sound, orden_filtro, N=10000):
     return w, J, e, d, d_hat
 
 
-def plot_results(results, P, S):
+def plot_results(results, P, S, S_hat, xgen, soundgen, compare_S_Shat=False):
     w, J, e, d, d_hat = results
     plt.figure(figsize=(10, 25))
 
@@ -105,9 +122,6 @@ def plot_results(results, P, S):
     plt.xlabel('n')
     plt.ylabel('Square error')
     plt.semilogy(J)
-    J_smooth = sp.savgol_filter(J, 500, 3)
-
-    plt.semilogy(J_smooth)
 
     plt.subplot(412)
     plt.title('Señal error vs n')
@@ -131,6 +145,32 @@ def plot_results(results, P, S):
     plt.plot(freqw, 20*np.log10(np.abs(wps)), label='W(z)')
     plt.plot(freqs, 20*np.log10(np.abs(s)), label='P(z)/S(z)')
     plt.legend()
+    if compare_S_Shat:
+        plt.figure(figsize=(10, 10))
+        plt.subplot(211)
+        freqs, s = sp.freqz(S[0], S[1], fs=48000, worN=10000)
+        freqw, s_hat = sp.freqz(S_hat[0], S_hat[1], fs=48000, worN=10000)
+        plt.title('Comparativa entre modulo de S(z) y S_hat(z)')
+        plt.plot(freqw, 20*np.log10(np.abs(s)), label='S(z)')
+        plt.plot(freqs, 20*np.log10(np.abs(s_hat)), label='S_hat(z)')
+        plt.legend()
+
+        plt.subplot(212)
+        plt.title('Comparativa entre modulo de S(n) y S_hat(n)')
+        plt.plot(S[0], label='S(n)')
+        plt.plot(S_hat[0], label='S_hat(n)')
+        plt.legend()
+
+    n = np.arange(0, len(e))
+    x = xgen(n)
+    sound = soundgen(n)
+    max = np.max([np.max(np.abs(e)), np.max(np.abs(sound)),
+                 np.max(np.abs(x)), np.max(np.abs(x + sound))])
+    display('Señal error:', Audio(e/max, rate=48000, normalize=False))
+    display('Señal interferencia:', Audio(
+        x/max, rate=48000, normalize=False))
+    display('Señal interferencia + sonido:',
+            Audio((x + sound)/max, rate=48000, normalize=False))
 
 
 def createRoom(print):
