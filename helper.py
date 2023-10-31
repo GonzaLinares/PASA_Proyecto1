@@ -113,6 +113,45 @@ def fxnlms_sim(w0, mu, P, S, S_hat, xgen, sound, orden_filtro, N=10000):
     return w, J, e, d, d_hat
 
 
+def fxlms_sim(w0, mu, P, S, S_hat, xgen, sound, orden_filtro, N=10000):
+    w = w0
+    J = np.zeros(N)
+    e = np.zeros(N)
+    d_hat = np.zeros(N)
+    n = np.arange(0, N, 1, dtype=int)
+
+    x = xgen(n)
+    d = sp.lfilter(P[0], P[1], x)
+    xf = sp.lfilter(S_hat[0], S_hat[1], x)
+
+    xf = np.concatenate([np.zeros(orden_filtro-1), xf])
+    zis = np.zeros(np.max([len(S[0]), len(S[1])])-1)
+    ziw = np.zeros(orden_filtro-1)
+
+    f = IntProgress(min=0, max=N)
+    display(f)
+
+    i = 0
+    display(J[0], display_id='J')
+    for n in range(N):
+
+        y, ziw = sp.lfilter(w, [1], [x[n]], zi=ziw)
+
+        y = y[0] + sound(n)
+
+        d_hat_aux, zis = sp.lfilter(S[0], S[1], [y], zi=zis)
+        d_hat[n] = d_hat_aux[0]
+        e[n] = d[n] + d_hat_aux[0]
+        J[n] = e[n] * e[n]
+        w = w - mu * xf[n:n + orden_filtro][::-1] * e[n]
+        if n//(N//100) > i:
+            update_display(J[n], display_id='J')
+            f.value = n
+            i += 1
+
+    return w, J, e, d, d_hat
+
+
 def plot_results(results, P, S, S_hat, xgen, soundgen, compare_S_Shat=False):
     w, J, e, d, d_hat = results
     plt.figure(figsize=(10, 25))
@@ -133,8 +172,8 @@ def plot_results(results, P, S, S_hat, xgen, soundgen, compare_S_Shat=False):
     plt.title('Señal deseada negada y deseada estimada')
     plt.xlabel('n')
     plt.ylabel('Amplitud')
-    plt.plot(-d, label='Señal deseada negada')
     plt.plot(d_hat, label='Señal deseada estimada')
+    plt.plot(-d, label='Señal deseada negada')
     plt.legend()
 
     plt.subplot(414)
@@ -142,8 +181,8 @@ def plot_results(results, P, S, S_hat, xgen, soundgen, compare_S_Shat=False):
     freqs, s = sp.freqz(P[0], S[0], fs=48000, worN=10000)
     freqw, wps = sp.freqz(w, [1], fs=48000, worN=10000)
     plt.title('Comparativa entre modulo de W(z) y P(z)/S(z)')
-    plt.plot(freqw, 20*np.log10(np.abs(wps)), label='W(z)')
-    plt.plot(freqs, 20*np.log10(np.abs(s)), label='P(z)/S(z)')
+    plt.semilogx(freqs, 20*np.log10(np.abs(s)), label='P(z)/S(z)')
+    plt.semilogx(freqw, 20*np.log10(np.abs(wps)), label='W(z)')
     plt.legend()
     if compare_S_Shat:
         plt.figure(figsize=(10, 10))
@@ -151,8 +190,8 @@ def plot_results(results, P, S, S_hat, xgen, soundgen, compare_S_Shat=False):
         freqs, s = sp.freqz(S[0], S[1], fs=48000, worN=10000)
         freqw, s_hat = sp.freqz(S_hat[0], S_hat[1], fs=48000, worN=10000)
         plt.title('Comparativa entre modulo de S(z) y S_hat(z)')
-        plt.plot(freqw, 20*np.log10(np.abs(s)), label='S(z)')
-        plt.plot(freqs, 20*np.log10(np.abs(s_hat)), label='S_hat(z)')
+        plt.semilogx(freqw, 20*np.log10(np.abs(s)), label='S(z)')
+        plt.semilogx(freqs, 20*np.log10(np.abs(s_hat)), label='S_hat(z)')
         plt.legend()
 
         plt.subplot(212)
@@ -185,9 +224,9 @@ def createRoom(print):
     height = 0.1
     roomCorners = np.array([[-1.0, -1.0, 0.4, 0.2, 0.2+np.sqrt(2)/20, 0.4+np.sqrt(2)/10, 0.6, 0.6],
                             [0.1, 0.2, 0.2, 0.4, 0.4+np.sqrt(2)/20, 0.2, 0.2, 0.1]])
-    room = pra.Room.from_corners(roomCorners, fs=fs)
-    room.materials = [m]*len(room.walls)
-    room.extrude(height)
+    room = pra.Room.from_corners(
+        roomCorners, fs=fs, materials=m, max_order=3, ray_tracing=True, air_absorption=True)
+    room.extrude(height, materials=m)
 
     # Agregamos la fuente y el microfono
     micError = np.array([0.6, 0.15, height/2])
@@ -210,20 +249,26 @@ def createRoom(print):
     return room
 
 
-def getImpulse(room):
+def getProomImpulse():
 
-    room.image_source_model()
+    fs = 48000
+    m = pra.Material('rough_concrete')
+
+    height = 0.1
+    roomCorners = np.array([[-1.0, -1.0, 0.4, 0.2, 0.2+np.sqrt(2)/20, 0.4+np.sqrt(2)/10, 0.6, 0.6],
+                            [0.1, 0.2, 0.2, 0.4, 0.4+np.sqrt(2)/20, 0.2, 0.2, 0.1]])
+    room = pra.Room.from_corners(
+        roomCorners, fs=fs, materials=m, max_order=3, ray_tracing=True, air_absorption=True)
+    room.extrude(height, materials=m)
+
+    # Agregamos la fuente y el microfono
+    micError = np.array([0.6, 0.15, height/2])
+    sourceRef = np.array([-0.6, 0.15, height/2])
+    room.add_microphone(micError)
+
+    room.add_source(sourceRef,)
 
     # Computamos y mostramos la respuesta al impulso
     room.compute_rir()
 
-    plt.figure()
-    room.plot_rir()
-    # plt.plot(room.rir[0][0])
-    # plt.plot(room.rir[0][1])
-    # plt.show()
-    # plt.plot(room.rir[1][0]) #Del source
-    # plt.plot(room.rir[1][1])
-    print(type(np.array(room.rir)[0][0]))
-    # respuesta impulsiva
-    np.savetxt('RoomSim.txt', np.array(room.rir).ravel())
+    return room.rir
